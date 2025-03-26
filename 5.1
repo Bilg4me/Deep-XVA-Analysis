@@ -1,0 +1,75 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+
+#Je ne vois pas trop comment simuler la vraie valeur, donc peut etre qu'on peut juste creer des valeurs?
+#Il y a une partie sur le github que j'essaye de comprendre
+#A voir
+
+def generate_data(n_samples=1000, seed=42):
+    np.random.seed(seed)
+    t = np.linspace(0, 1, n_samples)
+    beta_t = np.random.uniform(0.8, 1.2, size=n_samples)  
+    MtM_t = np.random.normal(0, 1, size=n_samples)   
+    delta_t = np.random.normal(0, 0.2, size=n_samples)
+    Nom = 1.0
+    
+    lhs = np.maximum(beta_t * (MtM_t + delta_t) - beta_t * MtM_t, 0)
+    rhs = Nom * lhs
+    return t.reshape(-1, 1), lhs.reshape(-1, 1), rhs.reshape(-1, 1)
+
+t, lhs, rhs = generate_data()
+
+lin_reg = LinearRegression()
+lin_reg.fit(t, lhs)
+lhs_pred_lr = lin_reg.predict(t)
+
+class SimpleNN(nn.Module):
+    def __init__(self):
+        super(SimpleNN, self).__init__()
+        self.linear = nn.Linear(1, 1)
+    
+    def forward(self, x):
+        return self.linear(x)
+
+def train_nn(model, t, lhs, epochs=1000, lr=0.01):
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    
+    t_tensor = torch.tensor(t, dtype=torch.float32)
+    lhs_tensor = torch.tensor(lhs, dtype=torch.float32)
+    
+    for epoch in range(epochs):
+        optimizer.zero_grad()
+        outputs = model(t_tensor)
+        loss = criterion(outputs, lhs_tensor)
+        loss.backward()
+        optimizer.step()
+        
+        if epoch % 200 == 0:
+            print(f"Epoch [{epoch}/{epochs}], Loss: {loss.item():.6f}")
+    
+    return model
+
+nn_model = SimpleNN()
+nn_model = train_nn(nn_model, t, lhs)
+
+t_tensor = torch.tensor(t, dtype=torch.float32)
+lhs_pred_nn = nn_model(t_tensor).detach().numpy()
+
+plt.figure(figsize=(10,5))
+plt.scatter(t, lhs, label='True LHS', alpha=0.5)
+plt.plot(t, lhs_pred_lr, label='Linear Regression', linestyle='dashed')
+plt.plot(t, lhs_pred_nn, label='Neural Network', linestyle='solid')
+plt.xlabel('t')
+plt.ylabel('LHS of Eq. (4)')
+plt.legend()
+plt.title('Comparison of Linear Regression vs. Neural Network')
+plt.show()
+
+
